@@ -15,7 +15,7 @@ a one-time writeup.
   because Flask (WSGI) and `gr.mount_gradio_app` (needs ASGI) don't mount
   together directly
 
-**Known bugs fixed along the way** (kept here to not repeat them later):
+**Known bugs fixed along the way** (kept here so we don't repeat them):
 - Gradio's `HTML` component inserts a *fragment*, not a document — styles
   on `<html>`/`<body>` get silently stripped. Fix: style a plain `<div>`.
 - Gradio's own theme CSS overrides text color with `!important`. Fix: add
@@ -39,17 +39,58 @@ punctuation doing the work of pacing (since Speechify has no SSML/pause
 tags), and parenthetical scope narrated explicitly rather than left to be
 inferred from symbols alone.
 
+**Extraction research (done):**
+
+Tested `pdfplumber` against two real PDFs to understand what "extract math
+from a PDF" actually runs into:
+
+- **Old paper (Isomap, Tenenbaum et al., Science 2000):** math symbols
+  extract as *silently wrong characters* — a broken/custom font encoding
+  specific to that era's prepress typesetting. `ε`→`e`, `τ`→`t`, `Σ`→`S`,
+  `√`→`=`, norm bars `‖ ‖`→`\`. Consistent substitution (same glyph always
+  maps to same wrong character), but wrong regardless — and this is a
+  property of the file itself, not something any extraction library can
+  fix by trying harder. This affects old, pre-Unicode-era PDFs generally,
+  not just this one paper.
+- **Modern paper (Attention Is All You Need, arXiv 2017):** math extracts
+  *correctly* — `Q`, `K`, `V`, `√`, `softmax` all come out as themselves.
+  Confirms LaTeX/pdftex-generated PDFs (the overwhelming majority of
+  modern ML papers — arXiv, NeurIPS, ICML) carry proper Unicode mappings.
+  Two much smaller issues showed up instead, both tractable:
+  - Missing spaces between words (`"Wecallourparticular"`) — a common,
+    benign PDF-extraction quirk, fixable with extraction settings or a
+    post-processing word-boundary heuristic.
+  - Occasional `(cid:80)`-style strings — pdfplumber being honest about a
+    glyph it couldn't map (vs. silently guessing wrong). This is
+    detectable: a simple check for `(cid:` in extracted text tells us
+    exactly when to fall back to reading that page as an image instead of
+    trusting the text layer.
+
+**Conclusion:** don't build a general OCR/image pipeline for everything —
+build two narrow, targeted fallback triggers instead:
+1. Page contains `(cid:` → unmapped glyph, re-read that page as an image
+2. Page's extracted text is suspiciously dense with stray single-char
+   symbols in positions where math is expected → likely old-encoding
+   corruption, re-read as an image
+Otherwise, trust the text extraction — it's correct for the papers this
+tool will actually see most of the time.
+
+**Image-fallback cost, if triggered:** roughly 1,000-2,000 tokens per
+page image (~$0.002-0.004 at current Sonnet pricing) — cheap enough that
+we don't need to be clever about minimizing how often it fires.
+
 **Pipeline:**
-1. Extract text preserving reading order (reuse/extend Module A's
-   extraction — may need pdfplumber instead of/alongside PyMuPDF if we
-   need font metadata to spot subscripts/superscripts)
+1. Extract text with pdfplumber (chosen over PyMuPDF for this module —
+   exposes font metadata, needed for the `(cid:` detection above). Run the
+   two fallback checks per page; re-read flagged pages as images via
+   Claude's vision instead of trusting the text layer.
 2. Detect math spans — regex + heuristics for symbols (∑, ∫, √, etc.) and
    sub/superscript patterns
 3. Send math spans (not the whole document) to an LLM with a system
    prompt specialized for spoken-math rewriting
 4. Reassemble into full text, with punctuation engineered for pacing
-5. Export as `.txt` or `.docx` — whichever imports into Speechify more
-   cleanly (needs a quick test)
+5. Export as `.txt` for now — `.pdf` export can come later as a polish
+   step, once the core rewriting actually works
 
 **Decisions still open:**
 - [ ] Which LLM — Groq (matches your AI201 RAG stack, fast/cheap) or
@@ -57,11 +98,17 @@ inferred from symbols alone.
       both on a few tricky equations before committing.
 - [ ] Math detection: regex-first, or hand off ambiguous spans to the LLM
       to decide "is this math or just symbols in prose"?
-- [ ] `.txt` vs `.docx` output — test which Speechify import behaves
-      better with punctuation-based pausing preserved
+
+**Decided:**
+- Export format: `.txt` for now — simplest to build, and matches what
+  Speechify actually needs. `.pdf` export is a nice-to-have for a later
+  polish pass (needs a new dependency — WeasyPrint or reportlab — worth
+  testing separately before relying on it)
 
 **Build order (small commits, same pattern as Module A):**
-1. Extraction reused from Module A, confirmed it preserves reading order
+1. pdfplumber extraction + the two fallback-trigger checks, unit-tested
+   against both the Isomap PDF (should trigger fallback) and the Attention
+   paper (should not)
 2. Math span detection (regex heuristics), unit-tested on sample equations
 3. LLM rewrite call + prompt, tested on isolated spans first
 4. Reassembly into full punctuated text

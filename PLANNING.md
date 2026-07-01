@@ -179,6 +179,35 @@ roughly 1,500-2,500 tokens depending on image size — well under a cent.
   fever + stiff neck, etc.) that escalates to "seek emergency care" rather
   than answering from the RAG pipeline
 
+## Sharing (revisit later, not yet)
+
+Once more of the app is built, decide how far to take this beyond
+personal use. Options, roughly least → most effort:
+
+1. **Gradio `share=True`** — one-line flag, temporary public URL
+   (~72hrs). Good for showing a couple friends. Still runs on your
+   machine, still uses your API key for every request they make — fine
+   for light, short-term use only.
+2. **Persistent demo (Hugging Face Spaces / Render)** — permanent URL,
+   free tier available. Needs a real answer to "whose API key pays for
+   this" — either a usage cap on your own key, or a "bring your own key"
+   field in the UI.
+3. **Open-source the repo** — zero hosting cost/risk to you; reaches only
+   people comfortable setting up their own dev environment, which cuts
+   against the accessibility goal somewhat.
+
+**Things that stop being optional once it's not just you:**
+- Module C's safety design (disclaimers, red-flag escalation) — matters
+  much more with strangers describing real symptoms, not just personal use
+- Privacy — be explicit that uploaded PDFs / health details aren't stored
+  or logged beyond the session
+- The tool's own accessibility (contrast, keyboard nav, screen-reader
+  behavior) shouldn't only be tuned to one person's preferences
+
+**Current plan:** don't decide yet. Once Module B is finished, a Tier 1
+share (temporary link, one or two people) is enough for real feedback
+without committing to hosting costs or a safety review before it's ready.
+
 ## Commit conventions
 
 Following the pattern from Modules A/B:

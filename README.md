@@ -39,23 +39,3 @@ python app.py
 ## Project structure
 
 See `PROJECT.md` for the architecture writeup and design decisions.
-```
-auara-assist/
-├── README.md        ✳️
-├── PROJECT.md              # writeup, like your AI201 submissions
-├── requirements.txt ✅
-├── .env.example ✅
-├── app.py       ✅            # Gradio entrypoint, 3 tabs
-├── src/
-│   ├── accessible_reader.py ✅  # Module A
-│   ├── math_speech.py          # Module B
-│   ├── migraine_rag.py         # Module C
-│   ├── pdf_utils.py             # shared extraction helpers
-│   └── prompts/
-│       ├── math_speech_prompt.txt
-│       └── migraine_system_prompt.txt
-├── data/migraine_corpus/    # ICHD-3, AHS/AAN guidelines open-access reviews
-├── vectorstore/             # ChromaDB persistence (gitignored)
-├── tests/
-└── .gitignore
-```

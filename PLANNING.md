@@ -105,9 +105,28 @@ page that didn't strictly need it costs a fraction of a cent), but worth
 remembering the *specific reason* a page gets flagged isn't always "this
 page has a math problem."
 
-Extraction only, no fallback execution yet — `extract_with_fallback_flags()`
-identifies which pages need the image fallback but doesn't perform it.
-That's the next build step, once the LLM vision call is wired up.
+Extraction and fallback execution both done — see the vision fallback
+section above for how flagged pages actually get corrected.
+
+**Image fallback: built and verified working (commit ready).**
+
+`render_page_as_png()` and `transcribe_page_with_vision()` added to
+`src/math_speech.py`. `anthropic` import is lazy (inside the function
+that needs it), so the rest of the module stays testable without the SDK
+installed. Manually tested end-to-end against the real broken equation
+on IsoMap page 2:
+
+| | Raw text extraction | Vision fallback |
+|---|---|---|
+| Equation | `E 5 \t~DG! 2 t~DY!\L2` | `E = ‖τ(D_G) − τ(D_Y)‖_L²` |
+| Norm expansion | `=Si,j Aij 2` | `√(Σ_i,j A_ij²)` |
+
+Every symbol recovered correctly — τ, ‖ ‖, √, Σ, subscripts, superscripts.
+Confirms the two-tier design (trust text extraction by default, fall back
+to vision only on flagged pages) works on the actual hardest case we have.
+
+Model used: `claude-sonnet-5` (current mid-tier). Cost per fallback page:
+roughly 1,500-2,500 tokens depending on image size — well under a cent.
 
 **Pipeline:**
 1. Extract text with pdfplumber (chosen over PyMuPDF for this module —
@@ -123,23 +142,24 @@ That's the next build step, once the LLM vision call is wired up.
    step, once the core rewriting actually works
 
 **Decisions still open:**
-- [ ] Which LLM — Groq (matches your AI201 RAG stack, fast/cheap) or
-      Claude API (likely better at nuanced math phrasing)? Worth testing
-      both on a few tricky equations before committing.
 - [ ] Math detection: regex-first, or hand off ambiguous spans to the LLM
       to decide "is this math or just symbols in prose"?
 
 **Decided:**
+- LLM: Claude (`claude-sonnet-5`) — proven on the vision fallback, handles
+  nuanced math/symbol transcription well. Not testing Groq separately for
+  now given how well this worked; can revisit if cost ever becomes a
+  real constraint (unlikely at this usage scale).
 - Export format: `.txt` for now — simplest to build, and matches what
   Speechify actually needs. `.pdf` export is a nice-to-have for a later
   polish pass (needs a new dependency — WeasyPrint or reportlab — worth
   testing separately before relying on it)
 
 **Build order (small commits, same pattern as Module A):**
-1. pdfplumber extraction + the two fallback-trigger checks, unit-tested
-   against both the Isomap PDF (should trigger fallback) and the Attention
-   paper (should not)
-2. Math span detection (regex heuristics), unit-tested on sample equations
+1. ✅ pdfplumber extraction + fallback-trigger detection
+2. ✅ Image rendering + vision transcription fallback, verified against
+   the real broken equation
+3. Math span detection (regex heuristics), unit-tested on sample equations
 3. LLM rewrite call + prompt, tested on isolated spans first
 4. Reassembly into full punctuated text
 5. Export to file, manually tested by importing into Speechify

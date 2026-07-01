@@ -79,6 +79,36 @@ tool will actually see most of the time.
 page image (~$0.002-0.004 at current Sonnet pricing) — cheap enough that
 we don't need to be clever about minimizing how often it fires.
 
+**Extraction code: built and tested (commit ready).**
+
+`src/math_speech.py` implements `extract_with_fallback_flags()` — pdfplumber
+extraction per page, with the two detectors above. Tested directly against
+both sample PDFs (not committed to repo — copyright; kept locally in
+`data/samples/`, gitignored):
+
+- **IsoMap.pdf:** all 5 pages flagged. Page 2 (the cost-function equation)
+  flagged via the `(cid:)` check — though on inspection, that particular
+  hit was an unrelated curly-apostrophe glyph, not the equation itself.
+  The font-name check independently confirmed the real issue: both
+  `GreekwithMathPi` and `MathematicalPi-One` (the broken fonts) are
+  present on that page. Both detectors fired, for different reasons —
+  the page was correctly flagged either way.
+- **attention.pdf:** 1/15 pages flagged (page 4), via `(cid:)` — and this
+  time it's a genuine catch: the Σ in a footnote equation
+  (`q·k = Σ qᵢkᵢ`) wasn't mapped by that font. Confirms the detector does
+  real work on modern PDFs, not just accidental false positives.
+
+**Honest caveat:** the `(cid:)` check isn't exclusively a math-symbol
+detector — it also fires on unrelated typographic glyphs (curly quotes,
+ligatures). That's fine for our purposes (falling back to an image on a
+page that didn't strictly need it costs a fraction of a cent), but worth
+remembering the *specific reason* a page gets flagged isn't always "this
+page has a math problem."
+
+Extraction only, no fallback execution yet — `extract_with_fallback_flags()`
+identifies which pages need the image fallback but doesn't perform it.
+That's the next build step, once the LLM vision call is wired up.
+
 **Pipeline:**
 1. Extract text with pdfplumber (chosen over PyMuPDF for this module —
    exposes font metadata, needed for the `(cid:` detection above). Run the

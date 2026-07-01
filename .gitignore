@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Sample PDFs used for local testing only — copyrighted material, not for the repo
+data/samples/

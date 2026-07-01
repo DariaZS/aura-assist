@@ -18,7 +18,7 @@ import fitz  # PyMuPDF
 
 # A few starter presets. Feel free to add more once you see it running.
 THEMES = {
-    "sepia": {"bg": "#f4ecd8", "text": "#3b3228", "font_size": "18px"},
+    "sepia": {"bg": "#f4ecd8", "text": "#2c2b2a", "font_size": "18px"},
     "dark": {"bg": "#1b1b1b", "text": "#e0e0e0", "font_size": "18px"},
     "high_contrast": {"bg": "#000000", "text": "#ffffff", "font_size": "20px"},
     "soft_charcoal": {"bg": "#2c2c2b", "text": "#d8d5cc", "font_size": "18px"},
@@ -51,17 +51,19 @@ def render_accessible_html(
     font_size = custom_font_size or preset["font_size"]
 
     # Preserve paragraph breaks; escape nothing fancy yet — plain text only.
-    paragraphs = "".join(f"<p>{p}</p>" for p in text.split("\n\n") if p.strip())
+    paragraphs = "".join(
+        f'<p style="color:{color} !important; margin:0 0 1em 0;">{p}</p>'
+        for p in text.split("\n\n") if p.strip()
+    )
 
     return f"""
-    <html>
-    <head><meta charset="utf-8"></head>
-    <body style="background-color:{bg}; color:{color}; font-size:{font_size};
-                 font-family: Georgia, serif; line-height:1.6; padding:2rem;
-                 max-width:700px; margin:auto;">
+    <div style="background-color:{bg} !important; color:{color} !important;
+                font-size:{font_size} !important;
+                font-family: Baskerville, 'Libre Baskerville', Garamond, Georgia, serif;
+                line-height:1.6; padding:2rem; max-width:700px; margin:auto;
+                border-radius:8px;">
         {paragraphs}
-    </body>
-    </html>
+    </div>
     """
 
 

@@ -18,7 +18,9 @@ def gradio_accessible_reader(pdf_file, theme):
     return process_pdf(pdf_file, theme=theme)
 
 
-with gr.Blocks(title="Aura Assist") as demo:
+APP_BG = "#1f1f1e"
+
+with gr.Blocks(title="Aura Assist", css=f".gradio-container {{ background-color: {APP_BG} !important; }}") as demo:
     gr.Markdown("# Aura Assist — accessible reader (Module A)")
     gr.Markdown(
         "Upload a PDF and pick a theme. Math-to-speech and the migraine "
@@ -27,7 +29,7 @@ with gr.Blocks(title="Aura Assist") as demo:
     with gr.Row():
         pdf_input = gr.File(label="PDF", file_types=[".pdf"])
         theme_input = gr.Dropdown(
-            choices=list(THEMES.keys()), value="sepia", label="Theme"
+            choices=list(THEMES.keys()), value="soft_charcoal", label="Theme"
         )
     output_html = gr.HTML(label="Accessible output")
     run_btn = gr.Button("Render")

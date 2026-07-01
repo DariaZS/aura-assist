@@ -22,6 +22,9 @@ research behind these):
    is the presence of the offending font family itself.
 """
 
+import base64
+import io
+
 import pdfplumber
 
 # Font-family name fragments we've confirmed produce silently-wrong math
@@ -32,6 +35,28 @@ KNOWN_BROKEN_MATH_FONTS = (
     "GreekwithMathPi",
     "MathematicalPi",
 )
+
+# Model used for the vision fallback. Sonnet is capable enough for careful
+# transcription and far cheaper than reaching for Opus on every flagged page.
+VISION_MODEL = "claude-sonnet-5"
+
+TRANSCRIBE_PROMPT = """\
+Transcribe the text on this page exactly as written. This is a page from
+an academic paper whose PDF text layer is unreliable for mathematical
+notation, so we're reading the image directly instead.
+
+Rules:
+- Transcribe faithfully — do not solve, simplify, or explain the math,
+  just write down exactly what's on the page.
+- Render every mathematical symbol using standard Unicode characters
+  where possible (Greek letters like τ, ε, Σ, Δ; operators like √, ≤, ∇;
+  etc.) rather than describing them in words.
+- Write subscripts and superscripts inline using ^ and _ (e.g. x_i, d^2)
+  since Unicode sub/superscripts don't cover every character we need.
+- Preserve paragraph and equation structure as it appears on the page.
+- Output only the transcribed text — no preamble, no commentary, no
+  markdown formatting or code fences.
+"""
 
 
 def page_needs_image_fallback(page) -> tuple[bool, str]:
@@ -48,6 +73,74 @@ def page_needs_image_fallback(page) -> tuple[bool, str]:
             return True, f"known-broken math font detected ({font})"
 
     return False, ""
+
+
+def render_page_as_png(pdf_path: str, page_number: int, resolution: int = 150) -> bytes:
+    """Render a single PDF page (1-indexed) as PNG bytes."""
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_number - 1]
+        image = page.to_image(resolution=resolution)
+        buf = io.BytesIO()
+        image.original.save(buf, format="PNG")
+        return buf.getvalue()
+
+
+def transcribe_page_with_vision(image_bytes: bytes, model: str = VISION_MODEL) -> str:
+    """Send a page image to Claude and get back a faithful text
+    transcription, used when the PDF's own text layer can't be trusted.
+
+    Requires ANTHROPIC_API_KEY to be set (read automatically from the
+    environment by the anthropic client — make sure your .env is loaded,
+    e.g. via `from dotenv import load_dotenv; load_dotenv()` at your
+    app's entry point).
+    """
+    import anthropic  # imported here, not at module level, so the rest of
+
+    # this module (rendering, detection) stays testable without the SDK
+
+    client = anthropic.Anthropic()
+    b64_image = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=2048,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": b64_image,
+                        },
+                    },
+                    {"type": "text", "text": TRANSCRIBE_PROMPT},
+                ],
+            }
+        ],
+    )
+    return response.content[0].text
+
+
+def resolve_fallback_pages(pdf_path: str, results: list[dict]) -> list[dict]:
+    """Given the output of extract_with_fallback_flags(), replace the
+    text of any flagged page with a vision-transcribed version. This is
+    the only function in this module that actually calls the API —
+    everything upstream is free, local, and instant.
+
+    Mutates and returns the same list. Adds a "source" key to each dict
+    so we can tell which pages came from the text layer vs. vision.
+    """
+    for r in results:
+        if r["needs_fallback"]:
+            image_bytes = render_page_as_png(pdf_path, r["page"])
+            r["text"] = transcribe_page_with_vision(image_bytes)
+            r["source"] = "vision"
+        else:
+            r["source"] = "text_layer"
+    return results
 
 
 def extract_with_fallback_flags(pdf_path: str) -> list[dict]:

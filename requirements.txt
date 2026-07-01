@@ -1,22 +1,5 @@
 # Core web/UI
 flask==3.0.3
-
-gradio>=6.9.0
-python-dotenv==1.0.1
-audioop-lts==0.2.1   # Python 3.13 removed audioop; pydub (via gradio) needs this backport
-# PDF handling (Module A: accessible reader)
-pymupdf==1.28.0
-pdfplumber==0.11.4
-
-# Coming later (Modules B & C) — uncomment as you build them
-# groq==0.11.0
-# anthropic==0.34.2
-# chromadb==0.5.5
-# weasyprint==62.3
-
-# Testing
-pytest==8.3.2# Core web/UI
-flask==3.0.3
 gradio>=6.9.0
 python-dotenv==1.0.1
 audioop-lts==0.2.1   # Python 3.13 removed audioop; pydub (via gradio) needs this backport
@@ -26,8 +9,8 @@ pymupdf==1.28.0
 pdfplumber==0.11.4
 
 # Coming later (Modules B & C) — uncomment as you build them
+anthropic>=0.40.0
 # groq==0.11.0
-# anthropic==0.34.2
 # chromadb==0.5.5
 # weasyprint==62.3
 

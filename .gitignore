@@ -220,3 +220,6 @@ __marimo__/
 
 # Sample PDFs used for local testing only — copyrighted material, not for the repo
 data/samples/
+
+# Generated reading-session output — contains full text of source PDFs
+reading_session_output.html

@@ -128,6 +128,45 @@ to vision only on flagged pages) works on the actual hardest case we have.
 Model used: `claude-sonnet-5` (current mid-tier). Cost per fallback page:
 roughly 1,500-2,500 tokens depending on image size — well under a cent.
 
+**Integration testing found two more issues (both fixed):**
+
+Running Module A + Module B together on the *full* Attention paper (not
+just one page) surfaced problems invisible in isolated single-page tests:
+
+1. **Missing spaces, pervasively** — `"Providedproperattributionis..."`
+   throughout the whole document, not just the one line noticed earlier.
+   Root cause: pdfplumber's default `x_tolerance` (character-adjacency
+   threshold for word-splitting) was too loose for this PDF's font
+   spacing. Fixed by setting `x_tolerance=1.5` in both extraction calls —
+   confirmed this fixes spacing without breaking equation extraction
+   (tested against the same softmax equation from before).
+
+2. **Reversed/scrambled text on figure pages — a third failure mode our
+   two detectors didn't catch.** Pages with the attention-visualization
+   diagrams (vertical axis-label text) extracted as `"tI si ni siht
+   tirips"` instead of "It is in this spirit" — word-by-word character
+   reversal. Root cause: that text is rotated 90° in the PDF (axis
+   labels), and naive extraction doesn't correctly reorder rotated
+   glyphs. Diagnosed via pdfplumber's `upright` flag on each character —
+   normal pages have 0-2% rotated characters, affected pages have
+   45-60%+. Added a third detector: flag any page where >10% of
+   characters are non-upright.
+
+Detector count went from 1/15 pages flagged to 4/15 (the original page 4,
+plus the three figure pages) once all three checks were in place —
+meaning the earlier "1/15" result, while not wrong, was incomplete: it
+just hadn't been tested against a full document with figure pages yet.
+
+**Full-document integration test: verified working end-to-end.** Reran
+against the complete Attention paper after both fixes — clean spacing
+throughout, all three figure pages reading forward correctly, all
+equations intact. Bonus: vision transcription also described diagram
+structure for the architecture figures, not just text — useful for
+accessibility beyond what was asked. Also fixed a response-parsing bug in
+`transcribe_page_with_vision()` along the way: `response.content[0]`
+isn't guaranteed to be the text block (a `ThinkingBlock` can come first);
+fixed by filtering `response.content` by `block.type == "text"`.
+
 **Pipeline:**
 1. Extract text with pdfplumber (chosen over PyMuPDF for this module —
    exposes font metadata, needed for the `(cid:` detection above). Run the

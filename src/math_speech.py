@@ -36,6 +36,14 @@ KNOWN_BROKEN_MATH_FONTS = (
     "MathematicalPi",
 )
 
+# Above this fraction of rotated ("non-upright") characters on a page,
+# text extraction tends to come out reversed/scrambled — confirmed on the
+# Attention paper's figure pages (vertical axis labels in the attention-
+# visualization diagrams extract as "tI si ni siht" instead of "It is in
+# this"). Normal pages sit at 0-2%; affected pages sit at 45-60%+, so this
+# threshold has wide margin on both sides.
+ROTATED_TEXT_THRESHOLD = 0.10
+
 # Model used for the vision fallback. Sonnet is capable enough for careful
 # transcription and far cheaper than reaching for Opus on every flagged page.
 VISION_MODEL = "claude-sonnet-5"
@@ -62,7 +70,7 @@ Rules:
 def page_needs_image_fallback(page) -> tuple[bool, str]:
     """Check a single pdfplumber page for signs its text layer can't be
     trusted. Returns (needs_fallback, reason)."""
-    text = page.extract_text() or ""
+    text = page.extract_text(x_tolerance=1.5) or ""
 
     if "(cid:" in text:
         return True, "unmapped glyph — (cid:) artifact found"
@@ -71,6 +79,12 @@ def page_needs_image_fallback(page) -> tuple[bool, str]:
     for font in fonts_on_page:
         if any(bad in font for bad in KNOWN_BROKEN_MATH_FONTS):
             return True, f"known-broken math font detected ({font})"
+
+    chars = page.chars
+    if chars:
+        rotated_ratio = sum(1 for c in chars if not c.get("upright", True)) / len(chars)
+        if rotated_ratio > ROTATED_TEXT_THRESHOLD:
+            return True, f"rotated text ({rotated_ratio:.0%} of characters) — likely scrambled order"
 
     return False, ""
 
@@ -121,7 +135,11 @@ def transcribe_page_with_vision(image_bytes: bytes, model: str = VISION_MODEL) -
             }
         ],
     )
-    return response.content[0].text
+    # response.content can include multiple block types (e.g. a
+    # ThinkingBlock before the actual TextBlock) — filter by type rather
+    # than assuming content[0] is always the text we want.
+    text_blocks = [block.text for block in response.content if block.type == "text"]
+    return "\n".join(text_blocks)
 
 
 def resolve_fallback_pages(pdf_path: str, results: list[dict]) -> list[dict]:
@@ -159,7 +177,11 @@ def extract_with_fallback_flags(pdf_path: str) -> list[dict]:
             needs_fallback, reason = page_needs_image_fallback(page)
             results.append({
                 "page": i,
-                "text": page.extract_text() or "",
+                # x_tolerance=1.5 (default is looser) — the default
+                # setting was merging words together with no space on
+                # some PDFs (confirmed on this exact paper: "Wecallour-
+                # particular" instead of "We call our particular").
+                "text": page.extract_text(x_tolerance=1.5) or "",
                 "needs_fallback": needs_fallback,
                 "reason": reason,
             })

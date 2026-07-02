@@ -14,19 +14,21 @@ Currently: plain text extraction + basic theming. Structure (headings,
 paragraphs) detection comes next.
 """
 
-import fitz  # PyMuPDF
-
 # A few starter presets. Feel free to add more once you see it running.
 THEMES = {
-    "sepia": {"bg": "#f4ecd8", "text": "#2c2b2a", "font_size": "18px"},
+    "sepia": {"bg": "#f4ecd8", "text": "#3b3228", "font_size": "18px"},
     "dark": {"bg": "#1b1b1b", "text": "#e0e0e0", "font_size": "18px"},
     "high_contrast": {"bg": "#000000", "text": "#ffffff", "font_size": "20px"},
-    "soft_charcoal": {"bg": "#2c2c2b", "text": "#d8d5cc", "font_size": "18px"},
+    "soft_charcoal": {"bg": "#1f1f1e", "text": "#d8d5cc", "font_size": "18px"},
 }
 
 
 def extract_text(pdf_path: str) -> str:
     """Pull raw text out of a PDF, page by page."""
+    import fitz  # PyMuPDF — imported here, not at module level, so the
+
+    # rest of this module (theming, rendering) stays testable without it
+
     doc = fitz.open(pdf_path)
     pages = [page.get_text() for page in doc]
     doc.close()

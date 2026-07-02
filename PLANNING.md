@@ -181,10 +181,61 @@ fixed by filtering `response.content` by `block.type == "text"`.
    step, once the core rewriting actually works
 
 **Decisions still open:**
-- [ ] Math detection: regex-first, or hand off ambiguous spans to the LLM
-      to decide "is this math or just symbols in prose"?
+- (none right now — see below)
 
-**Decided:**
+**Extraction scope + math handling (decided this session, after real testing):**
+
+Investigated how pdfplumber actually handles each content type on the
+Attention paper, and made scope calls:
+
+- **Prose:** extracts cleanly, reads aloud fine. No special handling.
+- **Tables:** pdfplumber detects 0 tables here (this PDF draws them
+  without ruling lines, and table detection keys off drawn borders). But
+  the *content* still comes through as flat text (`Self-Attention O(n2·d)
+  O(1) O(1)`) — structure lost, content kept. Decision: **keep tables**,
+  flattened-but-present beats absent; improve later if needed.
+- **Figures / graphs:** vector-drawn, so `page.images` is empty and the
+  plotted content is *silently dropped* — only figure labels/captions
+  come through (which is why the attention-viz pages extracted as
+  reversed text). Decision: **skip figures, document as a known
+  limitation.** A listening user can't see them anyway; describing them
+  well is its own hard problem, out of scope for now.
+- **Inline/display math:** detected fine by the symbol-gate (see below),
+  but on clean pages it arrives *spatially fragmented* — subscripts and
+  equation guts scatter onto adjacent lines (`softmax( √ )` with `QK^T`
+  and `d_k` missing). Detection can't repair this; the info is gone from
+  the flat text.
+
+**Math detection — what actually works:** a symbol-list gate, line by
+line (`src/math_detect.py`). Calibrated against real extracted text:
+- The reliable signals are Unicode math symbols (√ ∑ ∈ × · − ∞ …) and
+  Greek letters (β, ϵ, τ …), which survive extraction as correct Unicode.
+- The underscore is NOT a reliable signal — in this paper a literal `_`
+  only appeared in variable *names* (`warmup_steps`), not subscript math
+  (which extracts as `dk`, no underscore). Flagging on `_` alone gave 3
+  false positives and 0 real catches. Kept `_`/`^` pattern-matching but
+  don't rely on it alone.
+- Result: ~29 spans across the clean pages, mostly true math.
+
+**How fragmented equations get handled: Option A — send to vision.**
+Detection decides *which* pages have real (display) math; those pages go
+through the existing, proven `transcribe_page_with_vision()` path — the
+same code that already recovers equations correctly on flagged pages.
+Reuses working code, high reliability, ~cents per paper. Chosen over
+spatial reassembly from coordinates (Option B), which is a research-grade
+2D-layout-reconstruction problem (what Nougat/Mathpix do) and would
+block the tool on an open-ended sub-project.
+
+**Future swap-in (documented, not blocking): self-trained math model.**
+Training/fine-tuning a dedicated math-OCR model (image→linear math) is a
+legitimate standalone ML project and a good portfolio piece — but it's
+NOT a dependency for Aura Assist to work. The vision call is already
+isolated behind one function (`transcribe_page_with_vision`), so a future
+self-trained model could be swapped in behind that same interface with no
+other code changes. Kept as a "someday, if I want the hard ML problem"
+note, explicitly not gating the build.
+
+**Decided (earlier):**
 - LLM: Claude (`claude-sonnet-5`) — proven on the vision fallback, handles
   nuanced math/symbol transcription well. Not testing Groq separately for
   now given how well this worked; can revisit if cost ever becomes a
@@ -198,11 +249,13 @@ fixed by filtering `response.content` by `block.type == "text"`.
 1. ✅ pdfplumber extraction + fallback-trigger detection
 2. ✅ Image rendering + vision transcription fallback, verified against
    the real broken equation
-3. Math span detection (regex heuristics), unit-tested on sample equations
-3. LLM rewrite call + prompt, tested on isolated spans first
-4. Reassembly into full punctuated text
-5. Export to file, manually tested by importing into Speechify
-6. Wire into `demo.py` as a second tab
+3. ✅ Math span detection — symbol-list gate (`src/math_detect.py`),
+   calibrated against real extracted text
+4. Route detected-math pages through vision (Option A); skip figures
+5. LLM rewrite call + spoken-math prompt, tested on isolated spans first
+6. Reassembly into full punctuated text
+7. Export to `.txt`, manually tested by importing into Speechify
+8. Wire into `demo.py` as a second tab
 
 ## Module C — Migraine knowledge agent (RAG)
 

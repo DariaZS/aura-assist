@@ -8,6 +8,11 @@ audioop-lts==0.2.1   # Python 3.13 removed audioop; pydub (via gradio) needs thi
 pymupdf==1.28.0
 pdfplumber==0.11.4
 
+# Whole-PDF recoloring (Module A extension: preserve book, change colors)
+pypdfium2>=4.0.0
+pillow>=10.0.0
+numpy>=1.24.0
+
 # Coming later (Modules B & C) — uncomment as you build them
 anthropic>=0.40.0
 # groq==0.11.0
